@@ -18,4 +18,4 @@ user_data              = <<-EOF
                          EOF 
 
 ## Security Group Variable Values
-vpc_id                 = "vpc-08b0c56cb29df4c44"
+vpc_id                 = "vpc-0c83e0c93429ffbd1"
