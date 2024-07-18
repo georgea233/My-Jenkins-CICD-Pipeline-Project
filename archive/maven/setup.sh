@@ -36,7 +36,7 @@ cat <<EOT>> /root/.m2/settings.xml
     <mirror>
       <id>nexus</id>
       <name>nexus</name>
-      <url>http://13.235.132.119:8081/repository/maven_project/</url>
+      <url>http://172.31.22.103:8081/repository/maven_project/</url>
       <mirrorOf>*</mirrorOf>
     </mirror>
   </mirrors>
