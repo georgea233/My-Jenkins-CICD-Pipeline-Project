@@ -7,13 +7,13 @@ pipeline {
   agent any
   environment {
     WORKSPACE = "${env.WORKSPACE}"
-    NEXUS_CREDENTIAL_ID = 'Nexus-Credential'
-    NEXUS_USER = "$NEXUS_CREDS_USR"
-    NEXUS_PASSWORD = "$Nexus-Token"
-    NEXUS_URL = "172.31.22.103:8081"
-    NEXUS_REPOSITORY = "maven_project"
-    NEXUS_REPO_ID    = "maven_project"
-    ARTVERSION = "${env.BUILD_ID}"
+    // NEXUS_CREDENTIAL_ID = 'Nexus-Credential'
+    // NEXUS_USER = "$NEXUS_CREDS_USR"
+    // NEXUS_PASSWORD = "$Nexus-Token"
+    // NEXUS_URL = "172.31.22.103:8081"
+    // NEXUS_REPOSITORY = "maven_project"
+    // NEXUS_REPO_ID    = "maven_project"
+    // ARTVERSION = "${env.BUILD_ID}"
   }
   tools {
     maven 'localMaven'
@@ -72,61 +72,139 @@ pipeline {
           }
        }
     }
-    stage("Nexus Artifact Uploader"){
-        steps{
-           nexusArtifactUploader(
-              nexusVersion: 'nexus3',
-              protocol: 'http',
-              nexusUrl: '172.31.22.103:8081',
-              groupId: 'webapp',
-              version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
-              repository: 'maven-project-releases',  //"${NEXUS_REPOSITORY}",
-              credentialsId: "${NEXUS_CREDENTIAL_ID}",
-              artifacts: [
-                  [artifactId: 'webapp',
-                  classifier: '',
-                  file: "${WORKSPACE}/webapp/target/webapp.war",
-                  type: 'war']
-              ]
-           )
-        }
+    pipeline {
+    agent any
+    environment {
+        ANSIBLE_CREDENTIAL_ID = 'Ansible-Credential'
+        WORKSPACE_PATH = "/var/lib/jenkins/workspace/Jenkins-Complete-CICD-Pipeline"
     }
-    stage('Deploy to Development Env') {
-        environment {
-            HOSTS = 'dev'
+    stages {
+        stage("Nexus Artifact Uploader") {
+            steps {
+                nexusArtifactUploader(
+                    nexusVersion: 'nexus3',
+                    protocol: 'http',
+                    nexusUrl: '172.31.22.103:8081',
+                    groupId: 'webapp',
+                    version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
+                    repository: 'maven-project-releases',
+                    credentialsId: "${NEXUS_CREDENTIAL_ID}",
+                    artifacts: [
+                        [artifactId: 'webapp',
+                        classifier: '',
+                        file: "${WORKSPACE}/webapp/target/webapp.war",
+                        type: 'war']
+                    ]
+                )
+            }
         }
-        steps {
-            withCredentials([usernamePassword(credentialsId: 'Ansible-Credential', passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
-                sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+        stage('Deploy to Development Env') {
+            environment {
+                HOSTS = 'dev'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${ANSIBLE_CREDENTIAL_ID}", passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
+                    script {
+                        echo "Running Ansible Playbook for Development Environment"
+                        echo "Workspace path: ${WORKSPACE_PATH}"
+                        echo "Hosts: tag_Environment_${HOSTS}"
+                        sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+                    }
+                }
+            }
+        }
+        stage('Deploy to Staging Env') {
+            environment {
+                HOSTS = 'stage'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${ANSIBLE_CREDENTIAL_ID}", passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
+                    script {
+                        echo "Running Ansible Playbook for Staging Environment"
+                        echo "Workspace path: ${WORKSPACE_PATH}"
+                        echo "Hosts: tag_Environment_${HOSTS}"
+                        sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+                    }
+                }
+            }
+        }
+        stage('Quality Assurance Approval') {
+            steps {
+                input('Do you want to proceed?')
+            }
+        }
+        stage('Deploy to Production Env') {
+            environment {
+                HOSTS = 'prod'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${ANSIBLE_CREDENTIAL_ID}", passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
+                    script {
+                        echo "Running Ansible Playbook for Production Environment"
+                        echo "Workspace path: ${WORKSPACE_PATH}"
+                        echo "Hosts: tag_Environment_${HOSTS}"
+                        sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+                    }
+                }
             }
         }
     }
-    stage('Deploy to Staging Env') {
-        environment {
-            HOSTS = 'stage'
-        }
-        steps {
-            withCredentials([usernamePassword(credentialsId: 'Ansible-Credential', passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
-                sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
-            }
-        }
-    }
-    stage('Quality Assurance Approval') {
-        steps {
-            input('Do you want to proceed?')
-        }
-    }
-    stage('Deploy to Production Env') {
-        environment {
-            HOSTS = 'prod'
-        }
-        steps {
-            withCredentials([usernamePassword(credentialsId: 'Ansible-Credential', passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
-                sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
-            }
-         }
-      }
-   }
+}
+//     stage("Nexus Artifact Uploader"){
+//         steps{
+//            nexusArtifactUploader(
+//               nexusVersion: 'nexus3',
+//               protocol: 'http',
+//               nexusUrl: '172.31.22.103:8081',
+//               groupId: 'webapp',
+//               version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
+//               repository: 'maven-project-releases',  //"${NEXUS_REPOSITORY}",
+//               credentialsId: "${NEXUS_CREDENTIAL_ID}",
+//               artifacts: [
+//                   [artifactId: 'webapp',
+//                   classifier: '',
+//                   file: "${WORKSPACE}/webapp/target/webapp.war",
+//                   type: 'war']
+//               ]
+//            )
+//         }
+//     }
+//     stage('Deploy to Development Env') {
+//         environment {
+//             HOSTS = 'dev'
+//         }
+//         steps {
+//             withCredentials([usernamePassword(credentialsId: 'Ansible-Credential', passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
+//                 sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+//             }
+//         }
+//     }
+//     stage('Deploy to Staging Env') {
+//         environment {
+//             HOSTS = 'stage'
+//         }
+//         steps {
+//             withCredentials([usernamePassword(credentialsId: 'Ansible-Credential', passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
+//                 sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+//             }
+//         }
+//     }
+//     stage('Quality Assurance Approval') {
+//         steps {
+//             input('Do you want to proceed?')
+//         }
+//     }
+//     stage('Deploy to Production Env') {
+//         environment {
+//             HOSTS = 'prod'
+//         }
+//         steps {
+//             withCredentials([usernamePassword(credentialsId: 'Ansible-Credential', passwordVariable: 'PASSWORD', usernameVariable: 'USER_NAME')]) {
+//                 sh "ansible-playbook -i ${WORKSPACE}/ansible-config/aws_ec2.yaml ${WORKSPACE}/deploy.yaml --extra-vars \"ansible_user=$USER_NAME ansible_password=$PASSWORD hosts=tag_Environment_$HOSTS workspace_path=$WORKSPACE\""
+//             }
+//          }
+//       }
+//    }
   post {
     always {
         echo 'Slack Notifications.'
